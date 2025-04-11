@@ -1,4 +1,4 @@
-module github.com/kaysoro/discordgo-i18n
+module github.com/icehuntmen/i18n
 
 go 1.22
 

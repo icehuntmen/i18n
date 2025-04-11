@@ -1,4 +1,4 @@
-package discordgoi18n
+package i18n
 
 import (
 	"bytes"
