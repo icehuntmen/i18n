@@ -2,13 +2,27 @@ package i18n
 
 import (
 	"github.com/bwmarrin/discordgo"
+	"github.com/sirupsen/logrus"
 )
 
-//nolint:gochecknoglobals // False positive, cannot be overridden.
 var instance translator
+var logger *logrus.Logger
 
 func init() {
-	instance = newTranslator()
+	// Create a default logger with Paniclevel level (logistics is disconnected)
+	logger = logrus.New()
+	logger.SetLevel(logrus.PanicLevel) // Disconnect logging by default
+
+	// Initialize Translator with default logger
+	instance = newTranslator(logger)
+}
+
+// SetLogger allows you to install a user logger
+func SetLogger(l *logrus.Logger) {
+	if l != nil {
+		logger = l
+	}
+	instance = newTranslator(logger)
 }
 
 // SetDefaults sets the locale used as a fallback.

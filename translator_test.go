@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,64 +18,66 @@ const (
 	translatorFileDoesNotExistCase = "translatorFileDoesNotExistCase.json"
 
 	content1 = `
-	{
-		"hi": ["this is a {{ .Test }}"],
-		"with": ["all"],
-		"the": ["elements", "we"],
-		"can": ["find"],
-		"in": ["a","json"],
-		"config": ["file", "! {{ .Author }}"],
-		"parse": ["{{if $foo}}{{end}}"]
-	}
-	`
+    {
+        "hi": ["this is a {{ .Test }}"],
+        "with": ["all"],
+        "the": ["elements", "we"],
+        "can": ["find"],
+        "in": ["a","json"],
+        "config": ["file", "! {{ .Author }}"],
+        "parse": ["{{if $foo}}{{end}}"]
+    }
+    `
 
 	content2 = `
-	{
-		"this": ["is a {{ .Test }}"],
-		"with.a.file": ["containing", "less", "variables"],
-		"bye": ["see you"],
-		"parse2": ["{{if $foo}}{{end}}"]
-	}
-	`
+    {
+        "this": ["is a {{ .Test }}"],
+        "with.a.file": ["containing", "less", "variables"],
+        "bye": ["see you"],
+        "parse2": ["{{if $foo}}{{end}}"]
+    }
+    `
 
 	badContent = `
-	 [
-		"content",
-		"not",
-		"ok",
-		"test"
-	 ]
-	`
+     [
+        "content",
+        "not",
+        "ok",
+        "test"
+     ]
+    `
 )
 
 var (
 	//nolint:gochecknoglobals // Acceptable for a test.
 	translatorTest *translatorImpl
+	testLogger     = logrus.New() // Переименовано с logger на testLogger
 )
 
 func setUp() {
-	translatorTest = newTranslator()
+	logger.SetLevel(logrus.ErrorLevel) // Устанавливаем уровень логирования, чтобы избежать вывода в консоль
+	translatorTest = newTranslator(logger)
 	if err := os.WriteFile(translatornominalCase1, []byte(content1), os.ModePerm); err != nil {
-		log.Fatal().Err(err).Msgf("'%s' could not be created, test stopped", translatornominalCase1)
+		logger.Fatal(err.Error())
 	}
 	if err := os.WriteFile(translatornominalCase2, []byte(content2), os.ModePerm); err != nil {
-		log.Fatal().Err(err).Msgf("'%s' could not be created, test stopped", translatornominalCase2)
+		logger.Fatal(err.Error())
 	}
 	if err := os.WriteFile(translatorFailedUnmarshallCase, []byte(badContent), os.ModePerm); err != nil {
-		log.Fatal().Err(err).Msgf("'%s' could not be created, test stopped", translatorFailedUnmarshallCase)
+		logger.Fatal(err.Error())
 	}
 }
 
 func tearDown() {
 	translatorTest = nil
 	if err := os.Remove(translatornominalCase1); err != nil {
-		log.Warn().Err(err).Msgf("'%s' could not be deleted", translatornominalCase1)
+		logger.Warn(err.Error())
 	}
 	if err := os.Remove(translatornominalCase2); err != nil {
-		log.Warn().Err(err).Msgf("'%s' could not be deleted", translatornominalCase2)
+		logger.Warn(err.Error())
 	}
 	if err := os.Remove(translatorFailedUnmarshallCase); err != nil {
-		log.Warn().Err(err).Msgf("'%s' could not be deleted", translatorFailedUnmarshallCase)
+		logger.Warn(err.Error())
 	}
 }
 
@@ -91,7 +93,7 @@ func TestSetDefault(t *testing.T) {
 	setUp()
 	defer tearDown()
 
-	assert.Equal(t, defaultLocale, translatorTest.defaultLocale)
+	assert.Equal(t, discordgo.EnglishUS, translatorTest.defaultLocale)
 	translatorTest.SetDefault(discordgo.Italian)
 	assert.Equal(t, discordgo.Italian, translatorTest.defaultLocale)
 }
@@ -102,7 +104,7 @@ func TestLoadBundle(t *testing.T) {
 
 	// Bad case, file does not exist
 	_, err := os.Stat(translatorFileDoesNotExistCase)
-	assert.Error(t, os.ErrNotExist, err)
+	assert.ErrorIs(t, err, os.ErrNotExist)
 	assert.Error(t, translatorTest.LoadBundle(discordgo.French, translatorFileDoesNotExistCase))
 	assert.Empty(t, translatorTest.translations)
 	assert.Empty(t, translatorTest.loadedBundles)
@@ -112,7 +114,7 @@ func TestLoadBundle(t *testing.T) {
 	assert.Empty(t, translatorTest.translations)
 	assert.Empty(t, translatorTest.loadedBundles)
 
-	// Nominal case, load an existing and well structured bundle
+	// Nominal case, load an existing and well-structured bundle
 	assert.NoError(t, translatorTest.LoadBundle(discordgo.French, translatornominalCase1))
 	assert.Equal(t, 1, len(translatorTest.loadedBundles))
 	assert.Equal(t, 1, len(translatorTest.translations))
@@ -146,7 +148,7 @@ func TestGet(t *testing.T) {
 
 	// Nominal case, unexisting key with bundle loaded
 	assert.NoError(t, translatorTest.LoadBundle(discordgo.Dutch, translatornominalCase1))
-	assert.NoError(t, translatorTest.LoadBundle(defaultLocale, translatornominalCase2))
+	assert.NoError(t, translatorTest.LoadBundle(discordgo.EnglishUS, translatornominalCase2))
 	assert.Equal(t, "does_not_exist", translatorTest.Get(discordgo.Dutch, "does_not_exist", nil))
 
 	// Nominal case, Get existing key from loaded bundle
@@ -171,7 +173,7 @@ func TestGetDefault(t *testing.T) {
 	assert.Equal(t, "hi", translatorTest.GetDefault("hi", nil))
 
 	// Nominal case, unexisting key with bundle loaded
-	assert.NoError(t, translatorTest.LoadBundle(defaultLocale, translatornominalCase2))
+	assert.NoError(t, translatorTest.LoadBundle(discordgo.EnglishUS, translatornominalCase2))
 	assert.Equal(t, "does_not_exist", translatorTest.GetDefault("does_not_exist", nil))
 
 	// Nominal case, Get existing key from loaded bundle
@@ -267,7 +269,7 @@ func TestGetLocalizations(t *testing.T) {
 
 	// Nominal case: two bundles loaded so two translations expected
 	assert.NoError(t, translatorTest.LoadBundle(discordgo.Dutch, translatornominalCase1))
-	assert.NoError(t, translatorTest.LoadBundle(defaultLocale, translatornominalCase2))
+	assert.NoError(t, translatorTest.LoadBundle(discordgo.EnglishUS, translatornominalCase2))
 	assert.Equal(t, 2, len(*translatorTest.GetLocalizations("hi", Vars{})))
 
 	// Nominal case: three bundles loaded so three translations expected

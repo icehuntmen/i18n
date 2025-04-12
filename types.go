@@ -2,6 +2,7 @@ package i18n
 
 import (
 	"github.com/bwmarrin/discordgo"
+	"github.com/sirupsen/logrus"
 )
 
 // Vars is the collection used to inject variables during translation.
@@ -20,6 +21,7 @@ type translatorImpl struct {
 	defaultLocale discordgo.Locale
 	translations  map[discordgo.Locale]bundle
 	loadedBundles map[string]bundle
+	logger        *logrus.Logger
 }
 
 type translatorMock struct {

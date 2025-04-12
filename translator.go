@@ -10,7 +10,7 @@ import (
 	"text/template"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -21,11 +21,12 @@ const (
 	executionPolicy = "missingkey=error"
 )
 
-func newTranslator() *translatorImpl {
+func newTranslator(logger *logrus.Logger) *translatorImpl {
 	return &translatorImpl{
 		defaultLocale: defaultLocale,
 		translations:  make(map[discordgo.Locale]bundle),
 		loadedBundles: make(map[string]bundle),
+		logger:        logger,
 	}
 }
 
@@ -38,23 +39,24 @@ func (translator *translatorImpl) LoadBundle(locale discordgo.Locale, path strin
 	if !found {
 		buf, err := os.ReadFile(path)
 		if err != nil {
+			translator.logger.Errorf("Failed to read file '%s': %v", path, err)
 			return err
 		}
 
 		var jsonContent map[string]interface{}
 		err = json.Unmarshal(buf, &jsonContent)
 		if err != nil {
+			translator.logger.Errorf("Failed to unmarshal JSON content from '%s': %v", path, err)
 			return err
 		}
 
 		newBundle := translator.mapBundleStructure(jsonContent)
 
-		log.Debug().Msgf("Bundle '%s' loaded with '%s' content", locale, path)
+		translator.logger.Debugf("Bundle '%s' loaded with '%s' content", locale, path)
 		translator.loadedBundles[path] = newBundle
 		translator.translations[locale] = newBundle
 	} else {
-		log.Debug().
-			Msgf("Bundle '%s' loaded with '%s' content (already loaded for other locales)", locale, path)
+		translator.logger.Debugf("Bundle '%s' loaded with '%s' content (already loaded for other locales)", locale, path)
 		translator.translations[locale] = loadedBundle
 	}
 
@@ -65,45 +67,38 @@ func (translator *translatorImpl) Get(locale discordgo.Locale, key string, varia
 	bundles, found := translator.translations[locale]
 	if !found {
 		if locale != translator.defaultLocale {
-			log.Warn().Msgf("Bundle '%s' is not loaded, trying to translate key '%s' in '%s'",
-				locale, key, translator.defaultLocale)
+			translator.logger.Warnf("Bundle '%s' is not loaded, trying to translate key '%s' in '%s'", locale, key, translator.defaultLocale)
 			return translator.GetDefault(key, variables)
 		}
 
-		log.Warn().
-			Msgf("Bundle '%s' is not loaded, cannot translate '%s', key returned", locale, key)
+		translator.logger.Warnf("Bundle '%s' is not loaded, cannot translate '%s', key returned", locale, key)
 		return key
 	}
 
 	raws, found := bundles[key]
 	if !found || len(raws) == 0 {
 		if locale != translator.defaultLocale {
-			log.Warn().
-				Msgf("No label found for key '%s' in '%s', trying to translate it in %s",
-					key, locale, translator.defaultLocale)
+			translator.logger.Warnf("No label found for key '%s' in '%s', trying to translate it in %s", key, locale, translator.defaultLocale)
 			return translator.GetDefault(key, variables)
 		}
 
-		log.Warn().Msgf("No label found for key '%s' in '%s', key returned", locale, key)
+		translator.logger.Warnf("No label found for key '%s' in '%s', key returned", locale, key)
 		return key
 	}
 
-	//nolint:gosec // No need to have a strong random number generator here.
 	raw := raws[rand.Intn(len(raws))]
 
 	if variables != nil && strings.Contains(raw, leftDelim) {
 		t, err := template.New("").Delims(leftDelim, rightDelim).Option(executionPolicy).Parse(raw)
 		if err != nil {
-			log.Error().Err(err).
-				Msgf("Cannot parse raw corresponding to key '%s' in '%s', raw returned", locale, key)
+			translator.logger.Errorf("Cannot parse raw corresponding to key '%s' in '%s': %v", locale, key, err)
 			return raw
 		}
 
 		var buf bytes.Buffer
 		err = t.Execute(&buf, variables)
 		if err != nil {
-			log.Error().Err(err).
-				Msgf("Cannot inject variables in raw corresponding to key '%s' in '%s', raw returned", locale, key)
+			translator.logger.Errorf("Cannot inject variables in raw corresponding to key '%s' in '%s': %v", locale, key, err)
 			return raw
 		}
 		return buf.String()
