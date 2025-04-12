@@ -22,7 +22,7 @@ This assumes you already have a working Go environment, if not please see
 `go get` *will always pull the latest tagged release from the main branch.*
 
 ```sh
-go get github.com/kaysoro/discordgo-i18n
+go get github.com/icehuntmen/i18n
 ```
 
 **NOTICE**: this package has been built to ease usage of [bwmarrin/discordgo](https://github.com/bwmarrin/discordgo), it can be used for other projects but will be less practical.
@@ -32,7 +32,7 @@ go get github.com/kaysoro/discordgo-i18n
 Import the package into your project.
 
 ```go
-import i18n "github.com/kaysoro/discordgo-i18n"
+import i18n "github.com/icehuntmen/i18n"
 ```
 
 Load bundles for locales to support.
@@ -65,6 +65,11 @@ By default, the locale fallback used when a key does not have any translations i
 
 ```go
 i18n.SetDefault(discordgo.ChineseCN)
+```
+If you need to connect loggger, specify this
+```go
+var logger  := logrus.New()
+i18n.SetLogger(logger)
 ```
 
 To get translations use the below thread-safe method; if any translation cannot be found or an error occurred even with the fallback, key is returned.
